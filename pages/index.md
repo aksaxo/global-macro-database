@@ -1,65 +1,77 @@
 ---
-title: Global Macro Database - GDP Analysis
-description: Analysis of global GDP trends from the Global Macro Database
+title: Inflation in Latin America
+description: CPI YoY for selected LATAM countries using the Global Macro Database
 ---
 
-
-# Global GDP Trends Since 1900
+#### Inflation Trends Since 2015
 <LastRefreshed prefix="Data last updated"/>
 
-This dashboard analyzes global GDP data from the Global Macro Database, showing aggregate GDP trends across all countries since 1900.
+## Key Insights
 
-```sql global_gdp_by_year
-SELECT 
+### Argentina's inflation is significantly higher than that of other Latin American countries.
+
+### Latin American countries experience noticeably higher inflation compared to more 'stable' countries/currencies like the US and UK
+
+### But still similar to more 'middling' economies like India and South Africa, with Turkey as an exception
+
+
+```sql base_inflation_by_country
+with base as (
+  select
+    countryname as country,
     year,
-    SUM(nGDP_USD) as total_gdp_usd_billions,
-    COUNT(DISTINCT countryname) as countries_with_data
-FROM gmd 
-WHERE year >= 1900 
-    AND nGDP_USD IS NOT NULL 
-    AND nGDP_USD > 0
-GROUP BY year 
-ORDER BY year
+    cpi,
+    infl
+  from gmd
+  where year between 2014 and 2025
+    and countryname in ('Argentina', 'Mexico', 'Colombia', 'Brazil', 'Chile', 'United States', 'United Kingdom', 'Germany', 'Japan', 'Turkey', 'South Africa', 'India')
+),
+yoy as (
+  select
+    country,
+    year,
+    infl,
+    cpi,
+    100.0 * (cpi / lag(cpi) over (partition by country order by year) - 1) as cpi_yoy
+  from base
+)
+
+select * from yoy
 ```
 
-## Total Global GDP in USD (Billions) Since 1900
-
-<LineChart 
-    data={global_gdp_by_year}
-    x=year
-    y=total_gdp_usd_billions
-    title="Global GDP in USD (Billions)"
-    yAxisTitle="GDP (Billions USD)"
-    xAxisTitle="Year"
-    yFmt="#,##0,,"
+<Dropdown
+  name=category_multi_selectAllByDefault
+  data={base_inflation_by_country}
+  value=country
+  title="Select Countries"
+  multiple=true
+  selectAllByDefault=true
 />
 
-### Key Statistics
-
-- **Countries in Dataset**: <Value data={global_gdp_by_year} column=countries_with_data agg=max/> countries have GDP data
-- **Latest Year GDP**: $<Value data={global_gdp_by_year} column=total_gdp_usd_billions agg=max fmt="#,##0,,"/> trillion USD
-- **Data Coverage**: <Value data={global_gdp_by_year} column=year agg=min/> - <Value data={global_gdp_by_year} column=year agg=max/>
-
-```sql recent_growth
-SELECT 
-    year,
-    total_gdp_usd_billions,
-    total_gdp_usd_billions - LAG(total_gdp_usd_billions, 1) OVER (ORDER BY year) as gdp_growth_billions,
-    ROUND(((total_gdp_usd_billions - LAG(total_gdp_usd_billions, 1) OVER (ORDER BY year)) / LAG(total_gdp_usd_billions, 1) OVER (ORDER BY year)) * 100, 2) as gdp_growth_pct
-FROM ${global_gdp_by_year}
-WHERE year >= 2000
-ORDER BY year DESC
-LIMIT 10
+```sql inflation_by_country
+select * from ${base_inflation_by_country}
+where cpi_yoy is not null
+  and country in ${inputs.category_multi_selectAllByDefault.value}
+order by country, year
 ```
 
-## Recent GDP Growth (Last 10 Years)
 
-<DataTable 
-    data={recent_growth}
-    rows=10
->
-    <Column id=year title="Year"/>
-    <Column id=total_gdp_usd_billions title="GDP (Billions USD)" fmt="#,##0,,"/>
-    <Column id=gdp_growth_billions title="Growth (Billions USD)" fmt="+#,##0;-#,##0"/>
-    <Column id=gdp_growth_pct title="Growth %" fmt="+#,##0.0%;-#,##0.0%" contentType=delta/>
-</DataTable>
+## Inflation in last 10 years
+
+<LineChart 
+    data={inflation_by_country}
+    x=year
+    y=infl 
+    yAxisTitle="Inflation"
+    series=country
+/>
+
+## CPI YoY change by Country
+#### Since 2015
+
+<Heatmap
+  data={inflation_by_country}
+  x=year
+  y=country
+  value=cpi_yoy
+/>
